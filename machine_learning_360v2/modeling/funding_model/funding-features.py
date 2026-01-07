@@ -17,6 +17,12 @@ def main(
     df['debt_profit_ratio'] = df['debt_ratio'] / df['profit_margin'].replace(0, np.nan)
     df['marketing_efficiency'] = df['revenue'] / df['marketing_spend'].replace(0,1)
 
+    df['funding_request_ratio'] = df['funding_requested_amount'] / df['revenue'].replace(0,1)
+    
+    df['funding_history_score'] = df['previous_funding_amount'] / df['revenue'].replace(0,1)
+    
+    df['funding_risk_score'] = df['debt_ratio'] + df['default_history']
+
   
     df['profitability'] = pd.cut(
         df['profit_margin'],
@@ -53,6 +59,7 @@ def main(
         bins=[0,2,5,np.inf],
         labels=['Startup', 'Growth', 'Mature']
     )
+
 
     df.to_csv(output_path, index=False)
     print(f"SME feature dataset saved to: {output_path}")
