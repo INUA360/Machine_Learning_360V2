@@ -112,7 +112,79 @@ def main(
         }
     )
 
- 
+    # ------------------------
+    # TARGET VARIABLES (with noise and complexity)
+    # ------------------------
+
+    # 1. ELIGIBLE FOR FUNDING
+    # Use complex conditions with some randomness
+    eligibility_base = (
+        (dataset['revenue'] > 100_000).astype(float) * 0.25 +
+        (dataset['profit_margin'] > 0.12).astype(float) * 0.20 +
+        (dataset['debt_ratio'] < 0.45).astype(float) * 0.15 +
+        (dataset['default_history'] == 0).astype(float) * 0.20 +
+        (dataset['tax_registered'] == 1).astype(float) * 0.10 +
+        (dataset['licenses_up_to_date'] == 1).astype(float) * 0.10
+    )
+    # Add random noise to simulate real-world uncertainty
+    eligibility_noise = np.random.normal(0, 0.15, n)
+    eligibility_score = np.clip(eligibility_base + eligibility_noise, 0, 1)
+    dataset['eligible_for_funding'] = (eligibility_score > 0.55).astype(int)
+
+    # 2. DEFAULT RISK (low/medium/high)
+    # Complex non-linear risk calculation
+    risk_base = (
+        dataset['debt_ratio'] ** 1.5 * 0.30 +  # non-linear
+        dataset['default_history'] * 0.35 +
+        (1 - dataset['profit_margin']) * 0.20 +
+        dataset['staff_turnover_rate'] * 0.15
+    )
+    # Add sector-specific risk adjustments
+    sector_risk = {'agriculture': 0.1, 'retail': 0.05, 'tech': -0.05, 
+                   'manufacturing': 0, 'beauty': 0.08, 'transport': 0.12, 'services': 0.02}
+    dataset['sector_risk_adj'] = dataset['sector'].map(sector_risk)
+    risk_base += dataset['sector_risk_adj']
+
+    # Random shocks (simulate unexpected events)
+    random_shocks = np.random.choice([0, 0.2, -0.1], size=n, p=[0.85, 0.10, 0.05])
+    risk_score = np.clip(risk_base + random_shocks + np.random.normal(0, 0.1, n), 0, 1)
+
+    dataset['default_risk'] = pd.cut(risk_score, bins=[0, 0.33, 0.66, 1.0], 
+                                      labels=['low', 'medium', 'high'])
+    dataset.drop('sector_risk_adj', axis=1, inplace=True)  # clean up temp column
+
+    # 3. BUSINESS HEALTH SCORE (0-100)
+    # Multi-factor health with interactions
+    financial_health = (
+        dataset['profit_margin'] * 35 +
+        (1 - dataset['debt_ratio']) * 25 +
+        np.log1p(dataset['revenue']) / np.log1p(1_000_000) * 20
+    )
+
+    operational_health = (
+        (dataset['age_of_business'] / 25) * 10 +
+        (dataset['repeat_customers'] / dataset['total_customers'].clip(lower=1)) * 10
+    )
+
+    # Interaction effects (e.g., good marketing + good sales = bonus)
+    marketing_efficiency = dataset['conversions'] / dataset['clicks'].clip(lower=1)
+    interaction_bonus = np.where(
+        (marketing_efficiency > 0.05) & (dataset['active_customers'] > 1000),
+        5, 0
+    )
+
+    health_base = financial_health + operational_health + interaction_bonus
+
+    # Add realistic noise and random events
+    health_noise = np.random.normal(0, 8, n)
+    random_events = np.random.choice([-15, -5, 0, 5, 10], size=n, 
+                                      p=[0.05, 0.15, 0.60, 0.15, 0.05])
+
+    dataset['business_health_score'] = np.clip(
+        health_base + health_noise + random_events,
+        0, 100
+    ).round(1)
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     dataset.to_csv(output_path, index=False)
     logger.success(f"Synthetic SME agents dataset saved to {output_path}")
