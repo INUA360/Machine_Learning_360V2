@@ -35,6 +35,8 @@ def generate_base_data(n: int) -> pd.DataFrame:
         "revenue": revenue,
         "profit_margin": np.clip(np.random.normal(0.15, 0.07, n), 0, 1),
         "debt_ratio": np.clip(np.random.normal(0.3, 0.15, n), 0, 1),
+        "collateral_value": np.random.lognormal(mean=8, sigma=1.5, size=n),
+        "marketing_spend": np.random.uniform(0, 50_000, n),
 
         # Structure
         "employee_count": np.random.randint(1, 100, n),
@@ -48,13 +50,21 @@ def generate_base_data(n: int) -> pd.DataFrame:
 
         # Funding history
         "previous_funding_received": np.random.binomial(1, 0.4, n),
+        "previous_funding_amount": np.random.uniform(10_000, 500_000, n),
+        "default_history": np.random.binomial(1, 0.1, n),
         "loan_applications_count": np.random.randint(0, 10, n),
 
         # Funding request
         "funding_requested_amount": np.random.uniform(20_000, 1_000_000, n),
+        "expected_roi": np.clip(np.random.normal(0.2, 0.1, n), 0, 2),
         "project_duration_months": np.random.randint(3, 36, n),
         "business_stage": np.random.choice(["startup", "growth", "mature"], n, p=[0.3, 0.5, 0.2]),
         "collateral_offered": np.random.binomial(1, 0.7, n),
+
+        # Document uploads
+        "business_registration_uploaded": np.random.binomial(1, 0.9, n),
+        "tax_clearance_uploaded": np.random.binomial(1, 0.85, n),
+        "financial_statements_uploaded": np.random.binomial(1, 0.8, n),
 
         # Compliance
         "tax_registered": np.random.binomial(1, 0.9, n),
@@ -62,22 +72,32 @@ def generate_base_data(n: int) -> pd.DataFrame:
         "licenses_required": np.random.randint(1, 5, n),
         "licenses_up_to_date": np.random.binomial(1, 0.8, n),
 
+        # HR/Payroll
+        "total_payroll": np.random.uniform(50_000, 500_000, n),
+        "cost_per_hire": np.random.uniform(5_000, 50_000, n),
+        "nssf_contribution_percent": np.random.uniform(0.05, 0.12, n),
+        "nhif_contribution_percent": np.random.uniform(0.02, 0.05, n),
+        "staff_turnover_rate": np.clip(np.random.normal(0.15, 0.05, n), 0, 1),
+
         # Finance
         "bank_balance": np.random.uniform(5_000, 200_000, n),
         "m_pesa_balance": np.random.uniform(1_000, 50_000, n),
         "pending_invoices": np.random.randint(0, 20, n),
         "paid_invoices": np.random.randint(0, 50, n),
+        "late_payments": np.random.randint(0, 50, n),
 
-        # Marketing
+        # Marketing/Sales
         "campaign_spend": np.random.uniform(0, 50_000, n),
         "clicks": np.random.randint(0, 5000, n),
         "impressions": np.random.randint(0, 100_000, n),
         "conversions": np.random.randint(0, 500, n),
+        "target_segment": np.random.choice(["low", "medium", "high"], n),
 
         # Customers
         "total_customers": np.random.randint(50, 5000, n),
         "active_customers": np.random.randint(20, 4000, n),
         "repeat_customers": np.random.randint(10, 3000, n),
+        "channels_used": np.random.choice(["physical", "online", "mobile"], size=n),
 
         # Owner
         "owner_age": np.random.randint(20, 60, n),
@@ -98,36 +118,45 @@ def apply_constraints(df: pd.DataFrame) -> pd.DataFrame:
     # --- Funding dependencies ---
     df["previous_funding_amount"] = np.where(
         df["previous_funding_received"] == 1,
-        np.random.uniform(10_000, 500_000, len(df)),
+        df["previous_funding_amount"],
         0.0
     )
 
     df["default_history"] = np.where(
         df["previous_funding_received"] == 1,
-        np.random.binomial(1, 0.1, len(df)),
+        df["default_history"],
         0
     )
 
     # --- Collateral ---
     df["collateral_value"] = np.where(
         df["collateral_offered"] == 1,
-        np.random.lognormal(mean=8, sigma=1.5, size=len(df)),
+        df["collateral_value"],
         0.0
     )
 
     # --- Payroll ---
     df["total_payroll"] = np.where(
         df["staff_count"] > 0,
-        np.random.uniform(50_000, 500_000, len(df)),
+        df["total_payroll"],
         0.0
     )
 
     # --- Marketing ---
+    # If campaign_spend is 0, no clicks/impressions/conversions
     df.loc[df["campaign_spend"] == 0, ["clicks", "impressions", "conversions"]] = 0
 
     # --- Customers ---
     df["active_customers"] = np.minimum(df["active_customers"], df["total_customers"])
     df["repeat_customers"] = np.minimum(df["repeat_customers"], df["active_customers"])
+    
+    # --- Late payments ---
+    # Late payments should correlate with business age and payment behavior
+    df["late_payments"] = np.where(
+        df["age_of_business"] > 0,
+        np.minimum(df["late_payments"], df["age_of_business"] * 12),  # Max one late payment per month
+        0
+    )
 
     return df
 
@@ -147,11 +176,15 @@ def generate_targets(df: pd.DataFrame) -> pd.DataFrame:
 
     df["eligible_for_funding"] = (eligibility_score > 0.55).astype(int)
 
+    # Calculate risk score with proper NaN handling
     risk_score = (
         df["debt_ratio"] * 0.4 +
         df["default_history"] * 0.4 +
         df["profit_margin"].rsub(1) * 0.2
     ) + np.random.normal(0, 0.1, len(df))
+    
+    # Replace any NaN or inf values before binning
+    risk_score = np.nan_to_num(risk_score, nan=0.5, posinf=1.0, neginf=0.0)
 
     df["default_risk"] = pd.cut(
         np.clip(risk_score, 0, 1),
@@ -185,6 +218,8 @@ def main(
     df.to_csv(output_path, index=False)
 
     logger.success(f"Synthetic SME dataset generated → {output_path}")
+    logger.info(f"Total columns: {len(df.columns)}")
+    logger.info(f"Total rows: {len(df)}")
 
 
 if __name__ == "__main__":
