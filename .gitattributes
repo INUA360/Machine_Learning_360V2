@@ -1,0 +1,2 @@
+*.pkl filter=lfs diff=lfs merge=lfs -text
+machine_learning_360v2/modeling/funding_model/*.pkl filter=lfs diff=lfs merge=lfs -text
