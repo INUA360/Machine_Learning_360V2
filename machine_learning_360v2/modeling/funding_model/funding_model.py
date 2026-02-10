@@ -21,10 +21,7 @@ def main(
 ):
     df = pd.read_csv(INPUT_PATH)
     logger.info(f"Loaded engineered data: {df.shape}")
-
-    # ==============================
-    # ENCODING
-    # ==============================
+ 
     ordinal_features = ['business_stage', 'education_level']
     ord_categories = [
         ['startup', 'growth', 'mature'],
@@ -33,11 +30,14 @@ def main(
     ord_encoder = OrdinalEncoder(categories=ord_categories)
     X_ord = ord_encoder.fit_transform(df[ordinal_features])
 
+    #These have a natural order (e.g., startup → growth → mature). Uses OrdinalEncoder to convert them to numbers preserving that order.
+
     unordered_features = ['sector', 'channels_used', 'target_segment', 
                           'owner_gender', 'employment_status', 'location']
     ohe = OneHotEncoder(sparse_output=False, drop='first', handle_unknown='ignore')
     X_ohe = ohe.fit_transform(df[unordered_features])
 
+    #Uses OneHotEncoder to create binary columns for each category (e.g., sector "tech" becomes a column with 1s and 0s).
     numeric_features = [
         'revenue', 'profit_margin', 'debt_ratio', 'collateral_value', 
         'marketing_spend', 'employee_count', 'age_of_business',
@@ -61,19 +61,13 @@ def main(
     X_num_scaled = scaler.fit_transform(df[numeric_features])
     X_binary = df[binary_features].values
 
-    # Combine all features
     X = np.hstack([X_ord, X_ohe, X_num_scaled, X_binary])
 
-    # ==============================
-    # TARGETS
-    # ==============================
     y_eligibility = df['eligible_for_funding'].values
     y_risk = df['default_risk'].values
     y_health = df['business_health_score'].values
 
-    # ==============================
-    # FUNDING ELIGIBILITY MODEL
-    # ==============================
+ 
     logger.info("Training eligibility model")
     X_train, X_test, y_train, y_test = train_test_split(
         X, y_eligibility, test_size=0.3, stratify=y_eligibility, random_state=42
@@ -85,10 +79,7 @@ def main(
     y_pred = funding_model.predict(X_test)
     logger.info(f"Eligibility accuracy: {accuracy_score(y_test, y_pred):.3f}")
     print(classification_report(y_test, y_pred))
-
-    # ==============================
-    # DEFAULT RISK MODEL
-    # ==============================
+ 
     logger.info("Training default risk model")
     X_train, X_test, y_train, y_test = train_test_split(
         X, y_risk, test_size=0.2, stratify=y_risk, random_state=42
@@ -100,10 +91,7 @@ def main(
     y_pred = risk_model.predict(X_test)
     logger.info(f"Default risk accuracy: {accuracy_score(y_test, y_pred):.3f}")
     print(classification_report(y_test, y_pred))
-
-    # ==============================
-    # BUSINESS HEALTH MODEL
-    # ==============================
+ 
     logger.info("Training business health regression model")
     X_train, X_test, y_train, y_test = train_test_split(
         X, y_health, test_size=0.2, random_state=42
@@ -116,10 +104,7 @@ def main(
     rmse = np.sqrt(mean_squared_error(y_test, y_pred))
     r2 = r2_score(y_test, y_pred)
     logger.success(f"Business health RMSE: {rmse:.2f}, R²: {r2:.3f}")
-
-    # ==============================
-    # SAVE MODELS & ENCODERS
-    # ==============================
+ 
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump({
         'models': {
