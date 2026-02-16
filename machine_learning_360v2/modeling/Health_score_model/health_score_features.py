@@ -1,209 +1,139 @@
 from pathlib import Path
-import pandas as pd 
-import numpy as np
 import pandas as pd
+import numpy as np
 from loguru import logger
-from tqdm import tqdm
 import typer
 from machine_learning_360v2.config import PROCESSED_DATA_DIR
 
 app = typer.Typer()
 
+
 @app.command()
 def main(
-    input_path: Path = PROCESSED_DATA_DIR / "synthetic_sme_agents_data.csv",
-    output_path: Path = PROCESSED_DATA_DIR / "health_score_features.csv",
+    INPUT_PATH: Path = PROCESSED_DATA_DIR / "synthetic_sme_agents_data.csv",
+    OUTPUT_PATH: Path = PROCESSED_DATA_DIR / "health_score_features.csv"
+
 ):
-    df = pd.read_csv(input_path)
-    logger.info(f"Loaded dataset with shape: {df.shape}")
+    df = pd.read_csv(INPUT_PATH)
+    logger.info(f"Loaded data: {df.shape}")
 
-    # 1: financial health (0-100)
-
-    # profitability score (0-30)
-    df['probability_score']=np.clip(
-        df['profit_margin']*100*0.3,
-        0, 30
-    )
-
-    # liquidity score
-    total_liquid=df['bank_balance'] +df['m_pesa_balance']
-    monthly_revenue = df['revenue'] / 12
-    df['liquidity_months'] = total_liquid / monthly_revenue.replace(0, 1)
-    df['liquidity_score'] = np.clip(
-        df['liquidity_months']*5,
-          0, 25)
+    # Financial ratios
+    df['liquidity_ratio'] = (df['bank_balance'] + df['m_pesa_balance']) / df['revenue'].replace(0, 1)
+    df['cash_months'] = df['liquidity_ratio'] * 12
+    df['revenue_per_employee'] = df['revenue'] / df['employee_count'].replace(0, 1)
     
-    # debt management score
-    df['debt_management_score'] = np.clip(
-        (1 - df['debt_ratio'])*25,
-        0, 25
-    )
-
-    # revenue stability score based on revenue growth potential and revenue size 
-    df['revenue_stability_score'] = np.clip(
-        (np.log1p(df['revenue'])/np.log1p(1_000_000))*20,
-        0, 20
-    )
-
-    # financial health = sum of all scores
-    df['financial_health_score']=(
-        df['probability_score'] + 
-        df['liquidity_score'] + 
-        df['debt_management_score'] + 
-        df['revenue_stability_score']
-    )
-
-    logger.info("financial health features created")
-
-    # 2: operational efficiency (0-100)
-    # employee productivity 
-
-    df['revenue_per_employee'] = df['revenue'] /df['employee_count'].replace(0, 1)
-    df['employee_productivity_score'] = np.clip(
-        (df['revenue_per_employee']/50000)*30,
-        0, 30   
-    )
-
-    # payroll efficiency
-    df['payroll_ratio'] = df['total_payroll'] / df['revenue'].replace(0, 1)
-    df['payroll_efficiency_score'] = np.clip(
-        (1 - df['payroll_ratio']) * 25,
-        0, 25
-    )
-
-    # invoice management
-    df['invoice_completion_rate'] = df['paid_invoices']/(
-        df['paid_invoices'] + df['pending_invoices']
-    ).replace(0, 1)
-    df['invoice_mgmt_score'] = df['invoice_completion_rate']*25
+    # Operational ratios
+    df['payroll_to_revenue'] = df['total_payroll'] / df['revenue'].replace(0, 1)
+    df['invoice_paid_rate'] = df['paid_invoices'] / (df['paid_invoices'] + df['pending_invoices']).replace(0, 1)
+    df['staff_retention_rate'] = 1 - df['staff_turnover_rate']
     
-    # staff retention
-    df['staff_retention_score'] = np.clip(
-        (1 - df['staff_turnover_rate'])*20,
-        0, 20
-    )
-
-    # operational efficiency = sum of all scores
-    df['operational_efficiency_score'] = (
-        df['employee_productivity_score'] + 
-        df['payroll_efficiency_score'] + 
-        df['invoice_mgmt_score'] + 
-        df['staff_retention_score']
-    )
-    logger.info("operational efficiency features created")
-
-    # 3: compliance health
-
-    # documentation completeness
-    doc_score = (
-        df['business_registration_uploaded']*10 +
-        df['tax_clearance_uploaded']*10 +
-        df['financial_statements_uploaded']*10
-    )
-    df['documentation_score'] = doc_score
-
-    # tax compliance
-    df['tax_compliance_score'] = (
-        df['tax_registered'] * 20 +
-        df['tax_paid_last_year'] * 15
-    )
-
-    # license compliance
-    df['license_compliance_score'] = df['licenses_up_to_date'] * 30
+    # Customer ratios
+    df['customer_active_rate'] = df['active_customers'] / df['total_customers'].replace(0, 1)
+    df['customer_repeat_rate'] = df['repeat_customers'] / df['active_customers'].replace(0, 1)
     
-    # compliance health = sum of all scores
-    df['compliance_health_score'] = (
-        df['documentation_score'] + 
-        df['tax_compliance_score'] + 
-        df['license_compliance_score']
-    )
-    logger.info("compliance health features created")
-
-    # 4: growth potential
-    # market expansion based on customer acquisition and retention
-    df['customer_growth_rate']=(
-        df['active_customers']/df['total_customers'].replace(0, 1)
-    )
-    df['customer_retention_rate'] = (
-        df['repeat_customers']/df['active_customers'].replace(0, 1)
-    )
-    df['market_expansion_score'] = np.clip(
-        (df['customer_growth_rate']*15 + df['customer_retention_rate']*15),
-        0, 30
-    )
-    # market effectiveness
+    # Marketing ratios
     df['marketing_roi'] = df['revenue'] / df['marketing_spend'].replace(0, 1)
-    df['marketing_conversion']=df['conversions']/df['clicks'].replace(0, 1)
-    df['market_effectiveness_score'] = np.clip(
-        (np.log1p(df['marketing_roi'])*10 + df['marketing_conversion']*100*0.15),
-        0, 25
-    )
-    # business maturity 
-    df['maturity_score'] = np.clip(
-        (df['age_of_business']/10)*25,
-        0, 25
-    )
-    # funding track record
-    df['funding_track_score'] = (
-        df['previous_funding_received']*10 +
-        (1-df['default_history'])*10
-    )
+    df['conversion_rate'] = df['conversions'] / df['clicks'].replace(0, 1)
+    
+    logger.info("✓ Ratios calculated")
 
-    # growth potential = sum of all scores
-    df['growth_potential_score'] = (
-        df['market_expansion_score'] + 
-        df['market_effectiveness_score'] + 
-        df['maturity_score'] +  
-        df['funding_track_score']
+        # Risk flags 
+    
+    df['low_cash'] = (df['cash_months'] < 2).astype(int)
+    df['high_debt'] = (df['debt_ratio'] > 0.6).astype(int)
+    df['low_profit'] = (df['profit_margin'] < 0.05).astype(int)
+    df['late_payer'] = (df['late_payments'] > df['age_of_business']).astype(int)
+    
+    # Compliance flags
+    df['missing_docs'] = (
+        (df['business_registration_uploaded'] == 0) |
+        (df['tax_clearance_uploaded'] == 0) |
+        (df['financial_statements_uploaded'] == 0)
+    ).astype(int)
+    
+    df['tax_noncompliant'] = (
+        (df['tax_registered'] == 0) |
+        (df['tax_paid_last_year'] == 0)
+    ).astype(int)
+    
+    df['license_expired'] = (df['licenses_up_to_date'] == 0).astype(int)
+    
+    logger.info(" Risk flags created")
+    
+    # risk flags 
+    
+    np.random.seed(42)  
+    
+    # Calculate base health probability (0 to 1)
+    base_health = (
+        (df['profit_margin'] / 0.30) * 0.20 +           # Profitability weight
+        (df['cash_months'] / 12) * 0.20 +                # Liquidity weight
+        ((1 - df['debt_ratio']) / 1.0) * 0.15 +          # Debt management
+        (df['invoice_paid_rate']) * 0.10 +               # Operations
+        (df['customer_repeat_rate']) * 0.10 +            # Customer health
+        ((df['revenue'] / 500_000).clip(0, 1)) * 0.10 +  # Scale
+        (1 - df['missing_docs']) * 0.08 +                # Compliance
+        (1 - df['tax_noncompliant']) * 0.07              # Tax compliance
     )
-    logger.info("growth potential features created")
-
-    # comprehnensive health score = weighted sum of all dimensions
-    df['comprehensive_health_score'] = (
-        df['financial_health_score']*0.35 + 
-        df['operational_efficiency_score']*0.25 + 
-        df['compliance_health_score']*0.20 + 
-        df['growth_potential_score']*0.20
-    )
-    # normalize 
-    df['comprehensive_health_score'] = np.clip(
-        df['comprehensive_health_score'], 
-        0, 100
-        ).round(1)
-
-    # health score categories
-    df['health_category'] = pd.cut(
-        df['comprehensive_health_score'],
-        bins=[0,40,60, 80, 100],
-        labels=['Critical', 'At Risk', 'Stable', 'Thriving']
-    )
-    logger.info("comprehensive health score calculated")
-
-    # risk flags
-    df['liquidity_risk']= (df['liquidity_months'] < 2).astype(int)
-    df['debt_risk'] = (df['debt_ratio'] > 0.6).astype(int)
-    df['profitability_risk'] = (df['profit_margin'] < 0.05).astype(int)
-    df['compliance_risk'] = (df['compliance_health_score'] < 50).astype(int)
-    df['growth_stagnation_risk'] = (df['growth_potential_score'] < 40).astype(int)
-
-    df['total_risk_flags'] = (
-        df['liquidity_risk'] +
-        df['debt_risk'] +
-        df['profitability_risk'] +
-        df['compliance_risk'] +
-        df['growth_stagnation_risk']
-    )
-    logger.info("risk flags created")
-
-    # save output
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(output_path, index=False)
-    logger.success(f"Health score features saved to {output_path}")
-    logger.info(f"Final dataset shape: {df.shape}")
-    logger.info(f"Health Score Stats:")
-    logger.info(f"  Mean: {df['comprehensive_health_score'].mean():.1f}")
-    logger.info(f"  Median: {df['comprehensive_health_score'].median():.1f}")
-    logger.info(f"  Categories:\n{df['health_category'].value_counts()}")
+    
+    # Clip to 0-1 range
+    base_health = np.clip(base_health, 0, 1)
+    
+    # Add realistic noise (market conditions, luck, external factors)
+    noise = np.random.normal(0, 0.15, len(df))
+    health_probability = np.clip(base_health + noise, 0, 1)
+    
+    # Convert probability to category 
+    def prob_to_category(prob):
+        """
+        Convert health probability to category with randomness.
+        
+        Even high-probability businesses can fail (bad luck)
+        Even low-probability businesses can survive (good luck)
+        """
+        # Base category from probability
+        if prob < 0.25:
+            base_cat = 'Critical'
+        elif prob < 0.50:
+            base_cat = 'At Risk'
+        elif prob < 0.75:
+            base_cat = 'Stable'
+        else:
+            base_cat = 'Thriving'
+        
+        # Add 10% chance of "surprise" outcome (randomness!)
+        if np.random.random() < 0.10:
+            # Random jump to adjacent category
+            categories = ['Critical', 'At Risk', 'Stable', 'Thriving']
+            current_idx = categories.index(base_cat)
+            
+            # Move up or down one category randomly
+            if current_idx == 0:
+                return np.random.choice(['Critical', 'At Risk'])
+            elif current_idx == 3:
+                return np.random.choice(['Stable', 'Thriving'])
+            else:
+                return np.random.choice([
+                    categories[current_idx - 1],
+                    categories[current_idx],
+                    categories[current_idx + 1]
+                ])
+        
+        return base_cat
+    
+    df['health_category'] = [prob_to_category(p) for p in health_probability]
+    
+    logger.info("✓ Health categories labeled (with randomness)")
+    logger.info(f"\nCategory distribution:\n{df['health_category'].value_counts()}")
+    
+    # Also save the probability )
+    df['health_probability'] = health_probability
+    
+    OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(OUTPUT_PATH, index=False)
+    
+    logger.success(f"Saved to {OUTPUT_PATH}")
+    logger.info(f"Final shape: {df.shape}")
 
 
 if __name__ == "__main__":
