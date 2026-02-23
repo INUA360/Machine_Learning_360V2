@@ -58,6 +58,16 @@ def predict_single(sme_data: dict, bundle: dict) -> dict:
         'composite_growth_score': round(float(sme_data.get('composite_growth_score', 0)), 1),
         'growth_action': growth_action
     }
+#the expected output
+    {
+  'predicted_6m_growth_rate': 18.0,      ← Will grow 18%
+  'predicted_6m_revenue': 118000,        ← Revenue becomes $118k
+  'growth_stage': 'Growing',             ← In growth phase
+  'will_jump_category': True,            ← Jumps to larger bracket
+  'current_revenue_category': 'Medium',  ← Currently Medium
+  'composite_growth_score': 72.5,        ← Score: 72.5/100
+  'growth_action': 'growth_support'      ← Recommendation: Support them
+}
 
 
 @app.command()
