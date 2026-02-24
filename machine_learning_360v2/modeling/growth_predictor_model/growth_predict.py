@@ -154,3 +154,22 @@ def score(
 
 if __name__ == "__main__":
     app()
+
+    '''Scenario 1: Score one business
+──────────────────────────────
+sme = {
+    'sme_id': 'TECH_STARTUP_001',
+    'revenue': 100000,
+    'profit_margin': 0.20,
+    ...
+}
+result = predict_single(sme, bundle)
+# Returns: Growth 25%, Rapid Growth, Action: fast_track_funding
+
+Scenario 2: Score all businesses at once
+──────────────────────────────────────────
+python growth_predict.py score
+# Reads: growth_predictor_features.csv (2000 businesses)
+# Outputs: growth_decisions.csv (2000 rows with predictions)
+# Prints: Statistics showing growth distribution
+'''
