@@ -1,3 +1,12 @@
+#This logic is a **rule-based compliance interpreter** that sits *after* the funding models and converts their outputs into a 
+# policy-safe decision: first it enforces a **hard eligibility gate**, meaning if the SME fails funding policy rules the system 
+# immediately returns **HIGH compliance risk** with a clear audit reason, because policy violations are non-negotiable; if eligibility passes, 
+# it then **collects risk signals** rather than stopping, flagging a **high probability of default (≥ 60%)** and/or **poor business health (score < 50)** as concerns; 
+# finally, it aggregates those signals—if no risks exist the SME is marked **LOW risk (ALL_OK)**, 
+# if any severe risk like high default probability appears the outcome is **HIGH risk**, and if only non-fatal weaknesses remain the result is **MEDIUM risk**, 
+# which typically implies conditional approval or closer monitoring—this design cleanly separates **model prediction** from **policy judgment**, 
+# keeping the system explainable, auditable, and regulator-friendly.
+
 # compliance_score_sme.py
 import pandas as pd
 import numpy as np
@@ -38,15 +47,16 @@ def compliance_decision(p_default, eligible_pred, health_score):
     reasons = []
 
     if not eligible_pred:
-        return "HIGH", ["FUNDING_POLICY_VIOLATION"]
+        return "HIGH", ["FUNDING_POLICY_VIOLATION"] #if the sme fails eligibilitu rules we stop immediately
     if p_default >= 0.6:
         reasons.append("HIGH_DEFAULT_RISK")
     if health_score < 50:
         reasons.append("POOR_BUSINESS_HEALTH")
 
+#if no reasons are found the compliance risk is low
     if not reasons:
         return "LOW", ["ALL_OK"]
-    elif "HIGH_DEFAULT_RISK" in reasons or "FUNDING_POLICY_VIOLATION" in reasons:
+    elif "HIGH_DEFAULT_RISK" in reasons or "FUNDING_POLICY_VIOLATION" in reasons: #if any severe risks exists, liek high default probability or policy violation, the compliance is high
         return "HIGH", reasons
     else:
         return "MEDIUM", reasons
