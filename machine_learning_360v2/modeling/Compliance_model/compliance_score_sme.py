@@ -48,8 +48,8 @@ def compliance_decision(p_default, eligible_pred, health_score):
 
     if not eligible_pred:
         return "HIGH", ["FUNDING_POLICY_VIOLATION"] #if the sme fails eligibilitu rules we stop immediately
-    if p_default >= 0.6:
-        reasons.append("HIGH_DEFAULT_RISK")
+FA    if p_default >= 0.6:
+        reasons.append("HIGH_DEULT_RISK")
     if health_score < 50:
         reasons.append("POOR_BUSINESS_HEALTH")
 
