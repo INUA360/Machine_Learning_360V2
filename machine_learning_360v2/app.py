@@ -1,3 +1,25 @@
+'''Every time you get a new pkl file, this is the entire thought process:
+```
+pkl file
+  ↓
+inspect bundle.keys()          → find encoders, feature_names, models
+  ↓
+read feature_names             → these become SMEInput fields
+  ↓
+read training file             → look at the feature lists, it tells you exactly what columns the model was trained on, then the encoder order,copy encoder order exactly
+  ↓
+read features file             → If these columns are in numeric_features, the model was trained expecting them. You must compute them at prediction time too — find computed columns → write _compute_ratios()
+  ↓
+build SMEInput                 → one field per feature, safe defaults
+  ↓
+build _build_features()        → missing → fillna → encode → stack → clean
+  ↓
+write route                    → df → ratios → X → predict → return dict
+  ↓
+run server → test in /docs
+'''
+
+
 from pathlib import Path
 import joblib
 import numpy as np
@@ -15,14 +37,6 @@ app = FastAPI(
     description="ML-powered SME growth, health, funding, and compliance predictions"
 )
 
-# ═══════════════════════════════════════════════════════════════
-#  MODEL PATHS  — sourced directly from each predict file
-#
-#  growth_predict.py   → growth_predictor_model/best_growth_predictor_model.pkl
-#  health_score_model  → health_score_model/health_model.pkl
-#  funding_predict.py  → funding_model/best_models_funding.pkl
-#  compliance reuses   → funding_model/best_models_funding.pkl
-# ═══════════════════════════════════════════════════════════════
 
 GROWTH_MODEL_PATH  = MODELS_DIR / "growth_predictor_model" / "best_growth_predictor_model.pkl"
 HEALTH_MODEL_PATH  = MODELS_DIR / "health_score_model"     / "health_model.pkl"
@@ -38,9 +52,6 @@ RISK_FLAG_COLS = [
     "low_cash", "high_debt", "low_profit",
     "missing_docs", "tax_noncompliant", "license_expired",
 ]
-
-
-# ═══════════════════════════════════════════════════════════════
 #  SMEInput
 #
 #  Built by combining all fields from:
@@ -51,9 +62,9 @@ RISK_FLAG_COLS = [
 #
 #  Every field has a safe default so missing fields never
 #  crash the encoders.
-# ═══════════════════════════════════════════════════════════════
 
 class SMEInput(BaseModel):
+    #the pattern is field_name: type = default
     sme_id: Optional[str] = "unknown"
 
     # ordinal (health + funding models)
@@ -136,14 +147,13 @@ class SMEInput(BaseModel):
     tax_noncompliant: int = 0
     license_expired:  int = 0
 
-
-# ═══════════════════════════════════════════════════════════════
 #  RATIO CALCULATOR
 #  Mirrors health_score_features.py exactly.
 #  Runs before health feature building.
 #  Only calculates a ratio if the caller didn't provide it.
-# ═══════════════════════════════════════════════════════════════
 
+#these computed columns are in `numeric_features` — meaning the model was **trained on these computed values**. So at prediction 
+#time you must compute them too, which is why `_compute_ratios()` exists.
 def _compute_ratios(df: pd.DataFrame) -> pd.DataFrame:
     safe_rev   = df["revenue"].replace(0, 1)
     safe_click = df["clicks"].replace(0, 1)
@@ -176,14 +186,12 @@ def _compute_ratios(df: pd.DataFrame) -> pd.DataFrame:
 
     return df
 
-
-# ═══════════════════════════════════════════════════════════════
 #  NaN / inf CLEANER
 #  Runs after encoding, right before model.predict().
 #  Catches NaN from: missing columns, division by zero,
 #  scaler edge cases, and inf from ratio calculations.
 #  np.nan_to_num replaces NaN→0, +inf→0, -inf→0.
-# ═══════════════════════════════════════════════════════════════
+#
 
 def _clean(X) -> np.ndarray:
     """
@@ -195,16 +203,13 @@ def _clean(X) -> np.ndarray:
         X = X.toarray()
     X = np.array(X, dtype=np.float64)
     return np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
-
-
-# ═══════════════════════════════════════════════════════════════
 #  FEATURE BUILDERS
 #  Each one mirrors the predict logic from its source file,
 #  with three layers of NaN protection:
 #    1. Fill missing columns before encoding
 #    2. fillna() on existing columns that contain NaN
 #    3. _clean() after stacking — catches anything that slipped through
-# ═══════════════════════════════════════════════════════════════
+
 
 def _build_growth_features(df: pd.DataFrame, bundle: dict) -> np.ndarray:
     """Mirrors predict_single() in growth_predict.py"""
@@ -286,9 +291,6 @@ def _build_funding_features(df: pd.DataFrame, bundle: dict) -> np.ndarray:
     return _clean(np.hstack([X_ord, X_ohe, X_num, X_bin]))
 
 
-# ═══════════════════════════════════════════════════════════════
-#  HELPERS
-# ═══════════════════════════════════════════════════════════════
 
 def _growth_action(rate: float) -> str:
     """From growth_predict.py growth_action logic"""
@@ -312,10 +314,6 @@ def _compliance_decision(p_default: float, eligible: bool, health_score: float):
     return "MEDIUM", reasons
 
 
-# ═══════════════════════════════════════════════════════════════
-#  ROUTES
-# ═══════════════════════════════════════════════════════════════
-
 @app.get("/")
 def index():
     return {
@@ -324,6 +322,8 @@ def index():
         "docs":    "/docs"
     }
 
+'''The critical rule: Whatever transformations were applied to data during training must be applied in exactly the same order at prediction time. 
+The pkl file contains the fitted transformers that know how to do this.'''
 
 @app.post("/api/v1/predict/growth")
 def predict_growth(data: SMEInput):
