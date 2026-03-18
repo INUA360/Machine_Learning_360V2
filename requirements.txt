@@ -15,6 +15,7 @@ tqdm
 joblib
 typer
 flask
+uvicorn
 
 
 -e .
