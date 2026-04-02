@@ -14,5 +14,8 @@ scikit-learn
 tqdm
 joblib
 typer
+flask
+uvicorn
+
 
 -e .

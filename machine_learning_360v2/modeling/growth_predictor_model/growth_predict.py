@@ -58,6 +58,16 @@ def predict_single(sme_data: dict, bundle: dict) -> dict:
         'composite_growth_score': round(float(sme_data.get('composite_growth_score', 0)), 1),
         'growth_action': growth_action
     }
+#the expected output
+    {
+  'predicted_6m_growth_rate': 18.0,      ← Will grow 18%
+  'predicted_6m_revenue': 118000,        ← Revenue becomes $118k
+  'growth_stage': 'Growing',             ← In growth phase
+  'will_jump_category': True,            ← Jumps to larger bracket
+  'current_revenue_category': 'Medium',  ← Currently Medium
+  'composite_growth_score': 72.5,        ← Score: 72.5/100
+  'growth_action': 'growth_support'      ← Recommendation: Support them
+}
 
 
 @app.command()
@@ -144,3 +154,22 @@ def score(
 
 if __name__ == "__main__":
     app()
+
+    '''Scenario 1: Score one business
+──────────────────────────────
+sme = {
+    'sme_id': 'TECH_STARTUP_001',
+    'revenue': 100000,
+    'profit_margin': 0.20,
+    ...
+}
+result = predict_single(sme, bundle)
+# Returns: Growth 25%, Rapid Growth, Action: fast_track_funding
+
+Scenario 2: Score all businesses at once
+──────────────────────────────────────────
+python growth_predict.py score
+# Reads: growth_predictor_features.csv (2000 businesses)
+# Outputs: growth_decisions.csv (2000 rows with predictions)
+# Prints: Statistics showing growth distribution
+'''
