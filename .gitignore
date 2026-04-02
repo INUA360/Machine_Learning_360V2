@@ -192,3 +192,5 @@ cython_debug/
 *.pkl
 models/
 
+data/
+lead_scoring/
