@@ -1,21 +1,19 @@
-ipython
-jupyterlab
-loguru
-matplotlib
-mkdocs
-notebook
-numpy
+# Core API
+fastapi
+uvicorn[standard]
+pydantic
+
+# ML stack
+numpy==1.26.4
 pandas
-pip
-pytest
-python-dotenv
-ruff
 scikit-learn
-tqdm
 joblib
+
+# Utilities
+loguru
+python-dotenv
 typer
-flask
-uvicorn
+tqdm
 
-
+# Install the package itself
 -e .

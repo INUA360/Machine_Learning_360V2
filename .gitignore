@@ -189,6 +189,12 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
+# Local test scripts and scratch files
+tmp/
+
+# NOTE: .pkl model files are excluded locally.
+# For deployment (Render/Railway), models must be committed or served via cloud storage.
+# To include models for deployment, remove the lines below temporarily:
 *.pkl
 models/
 
